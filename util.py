@@ -11,7 +11,7 @@ def set_background(image_file):
     Supports Windows paths with backslashes, spaces, and special characters.
     """
     try:
-        # ✅ ป้องกันปัญหา escape character โดย normalize path
+        # ป้องกันปัญหา escape character โดย normalize path
         safe_path = os.path.normpath(image_file)
 
         if not os.path.exists(safe_path):
@@ -44,17 +44,17 @@ def classify(image, model, class_names):
     # Resize image to (224, 224)
     image = ImageOps.fit(image, (224, 224), Image.Resampling.LANCZOS)
 
-    # Convert to numpy
+    # Convert to numpy array
     image_array = np.asarray(image)
 
     # Normalize image
     normalized_image_array = (image_array.astype(np.float32) / 127.5) - 1
 
-    # Prepare data
+    # Prepare data for prediction
     data = np.ndarray(shape=(1, 224, 224, 3), dtype=np.float32)
     data[0] = normalized_image_array
 
-    # Predict
+    # Predict class probabilities
     prediction = model.predict(data)
     index = np.argmax(prediction)
     class_name = class_names[index]
