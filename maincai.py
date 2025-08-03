@@ -1,45 +1,54 @@
+import os
 import streamlit as st
+import gdown
 from keras.models import load_model
 from PIL import Image
 import pandas as pd
-import os
-import gdown
 from util import classify, set_background
 from datetime import datetime
-import tensorflow as tf
 from tensorflow.keras.layers import DepthwiseConv2D as OriginalDepthwiseConv2D
 from tensorflow.keras.utils import get_custom_objects
 from tensorflow.keras.applications import ConvNeXtTiny
-import io
 
-# ✅ URL Google Drive แบบ direct download
-GOOGLE_DRIVE_URL = "https://drive.google.com/uc?id=1AiTLRufmeh-DKJlwvWvBXrF53X_0z6ZF"
 MODEL_PATH = "model/convnext_best.h5"
 LABELS_PATH = "model/labels.txt"
+GOOGLE_DRIVE_URL = "https://drive.google.com/uc?id=1AiTLRufmeh-DKJlwvWvBXrF53X_0z6ZF"
 
-# ✅ ฟังก์ชันโหลดโมเดลจาก Google Drive ถ้าไม่มีในระบบ
 def download_model():
-    if not os.path.exists(MODEL_PATH):
-        st.info("⏳ Downloading model from Google Drive...")
-        os.makedirs("model", exist_ok=True)
-        gdown.download(GOOGLE_DRIVE_URL, MODEL_PATH, quiet=False)
-        st.success("✅ Model downloaded successfully!")
+    if os.path.exists(MODEL_PATH):
+        os.remove(MODEL_PATH)
+    st.info("⏳ Downloading model from Google Drive...")
+    os.makedirs("model", exist_ok=True)
+    gdown.download(GOOGLE_DRIVE_URL, MODEL_PATH, quiet=False)
+    st.success("✅ Model downloaded successfully!")
 
-# ✅ DepthwiseConv2D Fix
 class DepthwiseConv2DFixed(OriginalDepthwiseConv2D):
     def __init__(self, *args, **kwargs):
         if 'groups' in kwargs:
             kwargs.pop('groups')
         super().__init__(*args, **kwargs)
 
-# ✅ ลงทะเบียน custom layers
 _ = ConvNeXtTiny()
 get_custom_objects().update({
     'DepthwiseConv2D': DepthwiseConv2DFixed,
     'ConvNeXt': ConvNeXtTiny
 })
 
-# ---------------------------- Streamlit UI ----------------------------
+@st.cache_resource
+def load_model_cached():
+    if not os.path.exists(MODEL_PATH):
+        download_model()
+    custom_objects = {'DepthwiseConv2D': DepthwiseConv2DFixed, 'ConvNeXt': ConvNeXtTiny}
+    model = load_model(MODEL_PATH, custom_objects=custom_objects, compile=False)
+    return model
+
+def load_labels():
+    if not os.path.exists(LABELS_PATH):
+        st.error("❌ Labels file not found! Please upload labels.txt to model/")
+        return []
+    with open(LABELS_PATH, 'r') as f:
+        return [line.strip().split()[-1] for line in f]
+
 st.set_page_config(page_title="CP ALL", page_icon="📊", layout="centered", initial_sidebar_state="expanded")
 
 try:
@@ -61,30 +70,12 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ---------------------------- Input Form ----------------------------
 name = st.text_input("Employee name:")
 code = st.text_input("Branch code:")
 sign_type = st.selectbox("Select Sign Type:", ["Pole Sign", "Fin Sign"])
 many = st.slider("How many pictures:", 1, 6)
 model_type = st.radio("Select Part", ("Signs", "Base"))
 
-# ✅ โหลดโมเดลแบบ Cache เพื่อลดเวลาโหลดซ้ำ
-@st.cache_resource
-def load_model_cached():
-    download_model()
-    custom_objects = {'DepthwiseConv2D': DepthwiseConv2DFixed, 'ConvNeXt': ConvNeXtTiny}
-    model = load_model(MODEL_PATH, custom_objects=custom_objects, compile=False)
-    return model
-
-# ✅ โหลด labels
-def load_labels():
-    if not os.path.exists(LABELS_PATH):
-        st.error("❌ Labels file not found! Please upload labels.txt to model/")
-        return []
-    with open(LABELS_PATH, 'r') as f:
-        return [line.strip().split()[-1] for line in f]
-
-# ✅ โหลดโมเดลและ labels
 try:
     model = load_model_cached()
     class_names = load_labels()
@@ -93,7 +84,6 @@ except Exception as e:
     st.error(f"❌ Failed to load model: {e}")
     st.stop()
 
-# ---------------------------- Upload & Predict ----------------------------
 excel_file_path = 'data.xlsx'
 image_folder_path = 'images/'
 if not os.path.exists(image_folder_path):
@@ -150,15 +140,9 @@ if files:
 
             st.success('✅ Submission complete')
 
-            # เตรียมข้อมูล Excel สำหรับปุ่มดาวน์โหลด
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                updated_df.to_excel(writer, index=False)
-            output.seek(0)
-
             st.download_button(
                 label="Download data as Excel",
-                data=output,
+                data=updated_df.to_excel(index=False),
                 file_name=f"maintenance_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
