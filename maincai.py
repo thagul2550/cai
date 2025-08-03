@@ -10,9 +10,10 @@ import tensorflow as tf
 from tensorflow.keras.layers import DepthwiseConv2D as OriginalDepthwiseConv2D
 from tensorflow.keras.utils import get_custom_objects
 from tensorflow.keras.applications import ConvNeXtTiny
+import io
 
-# ✅ URL Google Drive (แก้เป็นไฟล์ ID ของมึง)
-GOOGLE_DRIVE_URL = "https://drive.google.com/file/d/1AiTLRufmeh-DKJlwvWvBXrF53X_0z6ZF/view?usp=sharing"
+# ✅ URL Google Drive แบบ direct download
+GOOGLE_DRIVE_URL = "https://drive.google.com/uc?id=1AiTLRufmeh-DKJlwvWvBXrF53X_0z6ZF"
 MODEL_PATH = "model/convnext_best.h5"
 LABELS_PATH = "model/labels.txt"
 
@@ -149,9 +150,15 @@ if files:
 
             st.success('✅ Submission complete')
 
+            # เตรียมข้อมูล Excel สำหรับปุ่มดาวน์โหลด
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                updated_df.to_excel(writer, index=False)
+            output.seek(0)
+
             st.download_button(
                 label="Download data as Excel",
-                data=updated_df.to_excel(index=False),
+                data=output,
                 file_name=f"maintenance_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
