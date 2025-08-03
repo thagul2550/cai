@@ -12,7 +12,7 @@ from tensorflow.keras.utils import get_custom_objects
 from tensorflow.keras.applications import ConvNeXtTiny
 
 # ✅ URL Google Drive (แก้เป็นไฟล์ ID ของมึง)
-GOOGLE_DRIVE_URL = "https://drive.google.com/uc?id=YOUR_FILE_ID"
+GOOGLE_DRIVE_URL = https://drive.google.com/file/d/1AiTLRufmeh-DKJlwvWvBXrF53X_0z6ZF/view?usp=sharing
 MODEL_PATH = "model/convnext_best.h5"
 LABELS_PATH = "model/labels.txt"
 
