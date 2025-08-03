@@ -1,4 +1,5 @@
 import os
+import io
 import streamlit as st
 import gdown
 from keras.models import load_model
@@ -15,12 +16,11 @@ LABELS_PATH = "model/labels.txt"
 GOOGLE_DRIVE_URL = "https://drive.google.com/uc?id=1AiTLRufmeh-DKJlwvWvBXrF53X_0z6ZF"
 
 def download_model():
-    if os.path.exists(MODEL_PATH):
-        os.remove(MODEL_PATH)
-    st.info("⏳ Downloading model from Google Drive...")
-    os.makedirs("model", exist_ok=True)
-    gdown.download(GOOGLE_DRIVE_URL, MODEL_PATH, quiet=False)
-    st.success("✅ Model downloaded successfully!")
+    if not os.path.exists(MODEL_PATH):
+        st.info("⏳ Downloading model from Google Drive...")
+        os.makedirs("model", exist_ok=True)
+        gdown.download(GOOGLE_DRIVE_URL, output=MODEL_PATH, quiet=False)
+        st.success("✅ Model downloaded successfully!")
 
 class DepthwiseConv2DFixed(OriginalDepthwiseConv2D):
     def __init__(self, *args, **kwargs):
@@ -28,7 +28,7 @@ class DepthwiseConv2DFixed(OriginalDepthwiseConv2D):
             kwargs.pop('groups')
         super().__init__(*args, **kwargs)
 
-_ = ConvNeXtTiny()
+_ = ConvNeXtTiny()  # ลงทะเบียน ConvNeXt
 get_custom_objects().update({
     'DepthwiseConv2D': DepthwiseConv2DFixed,
     'ConvNeXt': ConvNeXtTiny
@@ -36,8 +36,7 @@ get_custom_objects().update({
 
 @st.cache_resource
 def load_model_cached():
-    if not os.path.exists(MODEL_PATH):
-        download_model()
+    download_model()
     custom_objects = {'DepthwiseConv2D': DepthwiseConv2DFixed, 'ConvNeXt': ConvNeXtTiny}
     model = load_model(MODEL_PATH, custom_objects=custom_objects, compile=False)
     return model
@@ -49,6 +48,7 @@ def load_labels():
     with open(LABELS_PATH, 'r') as f:
         return [line.strip().split()[-1] for line in f]
 
+# UI Setup
 st.set_page_config(page_title="CP ALL", page_icon="📊", layout="centered", initial_sidebar_state="expanded")
 
 try:
@@ -140,9 +140,15 @@ if files:
 
             st.success('✅ Submission complete')
 
+            # เตรียมไฟล์ Excel สำหรับดาวน์โหลดแบบ BytesIO
+            towrite = io.BytesIO()
+            with pd.ExcelWriter(towrite, engine='openpyxl') as writer:
+                updated_df.to_excel(writer, index=False)
+            towrite.seek(0)
+
             st.download_button(
                 label="Download data as Excel",
-                data=updated_df.to_excel(index=False),
+                data=towrite,
                 file_name=f"maintenance_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
