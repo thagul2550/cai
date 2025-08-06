@@ -1,7 +1,8 @@
-numpy
 streamlit
-Pillow
-keras
 tensorflow
-openpyxl
+keras
+pillow
 huggingface_hub
+pandas
+numpy
+openpyxl
