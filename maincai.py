@@ -1,7 +1,7 @@
 import os
 import streamlit as st
 from PIL import Image
-from huggingface_hub import hf_hub_download
+from huggingface_hub import snapshot_download
 from keras.models import load_model
 from tensorflow.keras.layers import DepthwiseConv2D as OriginalDepthwiseConv2D
 from tensorflow.keras.utils import get_custom_objects
@@ -9,17 +9,17 @@ from tensorflow.keras.applications import ConvNeXtTiny
 from util import classify, set_background
 from datetime import datetime
 
-# CONFIG
 REPO_ID = "Gusgoodmansamadayo/Convnex_Base-7_11_Sign"
 MODEL_FILE = "convnext_best.h5"
 LABEL_FILE = "labels.txt"
 
-# โหลดโมเดลจาก HF พร้อม fix custom layer
 @st.cache_resource
 def load_model_from_hf():
     token = os.getenv("HF_TOKEN", None)
-    model_path = hf_hub_download(repo_id=REPO_ID, filename=MODEL_FILE, token=token)
-    labels_path = hf_hub_download(repo_id=REPO_ID, filename=LABEL_FILE, token=token)
+
+    model_dir = snapshot_download(repo_id=REPO_ID, token=token)
+    model_path = os.path.join(model_dir, MODEL_FILE)
+    labels_path = os.path.join(model_dir, LABEL_FILE)
 
     class DepthwiseConv2DFixed(OriginalDepthwiseConv2D):
         def __init__(self, *args, **kwargs):
@@ -39,10 +39,8 @@ def load_model_from_hf():
 
     return model, class_names
 
-# UI
 st.set_page_config(page_title="CP ALL", page_icon="📊", layout="centered")
 
-# พยายามตั้ง background ถ้าไฟล์ไม่มีจะไม่ error
 try:
     set_background("bg/AI for preventive maintenance Signage of 7-ELEVEN's with photo inspection.png")
 except Exception:
@@ -58,14 +56,12 @@ st.markdown(
 )
 st.markdown("<style>.stTextInput label, .stSlider label, .stFileUploader label { color:white; }</style>", unsafe_allow_html=True)
 
-# User inputs
 name = st.text_input("Employee name:")
 code = st.text_input("Branch code:")
 sign_type = st.selectbox("Select Sign Type:", ["Pole Sign", "Fin Sign"])
 many = st.slider("How many pictures:", 1, 6)
 model_type = st.radio("Select Part", ("Signs", "Base"))
 
-# โหลดโมเดล
 try:
     model, class_names = load_model_from_hf()
     st.success("✅ Model loaded successfully from Hugging Face!")
@@ -73,8 +69,8 @@ except Exception as e:
     st.error(f"❌ Failed to load model: {e}")
     st.stop()
 
-# อัปโหลดและ classify รูปภาพ
 files = st.file_uploader("Upload images", type=['jpeg', 'jpg', 'png', 'jfif'], accept_multiple_files=True)
+
 if files:
     upload_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     for i, file in enumerate(files):
