@@ -1,45 +1,61 @@
+import os
+import io
 import streamlit as st
+import gdown
 from keras.models import load_model
 from PIL import Image
 import pandas as pd
-import os
 from util import classify, set_background
 from datetime import datetime
-import tensorflow as tf
 from tensorflow.keras.layers import DepthwiseConv2D as OriginalDepthwiseConv2D
 from tensorflow.keras.utils import get_custom_objects
 from tensorflow.keras.applications import ConvNeXtTiny
 
-# ✅ แก้ DepthwiseConv2DFixed
+MODEL_PATH = "model/convnext_best.h5"
+LABELS_PATH = "model/labels.txt"
+GOOGLE_DRIVE_URL = "https://drive.google.com/uc?id=1AiTLRufmeh-DKJlwvWvBXrF53X_0z6ZF"
+
+def download_model():
+    if not os.path.exists(MODEL_PATH):
+        st.info("⏳ Downloading model from Google Drive...")
+        os.makedirs("model", exist_ok=True)
+        gdown.download(GOOGLE_DRIVE_URL, output=MODEL_PATH, quiet=False)
+        st.success("✅ Model downloaded successfully!")
+
 class DepthwiseConv2DFixed(OriginalDepthwiseConv2D):
     def __init__(self, *args, **kwargs):
         if 'groups' in kwargs:
             kwargs.pop('groups')
         super().__init__(*args, **kwargs)
 
-# ✅ ลงทะเบียน custom layers
 _ = ConvNeXtTiny()  # ลงทะเบียน ConvNeXt
 get_custom_objects().update({
     'DepthwiseConv2D': DepthwiseConv2DFixed,
     'ConvNeXt': ConvNeXtTiny
 })
 
-# ---------------------------- Streamlit UI ----------------------------
+@st.cache_resource
+def load_model_cached():
+    download_model()
+    custom_objects = {'DepthwiseConv2D': DepthwiseConv2DFixed, 'ConvNeXt': ConvNeXtTiny}
+    model = load_model(MODEL_PATH, custom_objects=custom_objects, compile=False)
+    return model
 
-st.set_page_config(
-    page_title="CP ALL",
-    page_icon="📊",
-    layout="centered",
-    initial_sidebar_state="expanded"
-)
+def load_labels():
+    if not os.path.exists(LABELS_PATH):
+        st.error("❌ Labels file not found! Please upload labels.txt to model/")
+        return []
+    with open(LABELS_PATH, 'r') as f:
+        return [line.strip().split()[-1] for line in f]
 
-# ✅ Set background
+# UI Setup
+st.set_page_config(page_title="CP ALL", page_icon="📊", layout="centered", initial_sidebar_state="expanded")
+
 try:
     set_background("bg/AI for preventive maintenance Signage of 7-ELEVEN's with photo inspection.png")
 except Exception as e:
     st.error(f"Error setting background: {e}")
 
-# ✅ โลโก้และหัวข้อ
 st.markdown(
     '<div style="text-align: center"><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/4/40/7-eleven_logo.svg/791px-7-eleven_logo.svg.png" width="150"></div>',
     unsafe_allow_html=True
@@ -48,15 +64,11 @@ st.markdown(
     '<div style="text-align: center; color: white;"><h1>AI for Preventive Maintenance Signage of 7-ELEVEN with Photo Inspection</h1></div>',
     unsafe_allow_html=True
 )
-
-# ✅ สไตล์ input
 st.markdown("""
     <style>
     .stTextInput label, .stSlider label, .stFileUploader label { color: white; }
     </style>
 """, unsafe_allow_html=True)
-
-# ---------------------------- Input Form ----------------------------
 
 name = st.text_input("Employee name:")
 code = st.text_input("Branch code:")
@@ -64,35 +76,16 @@ sign_type = st.selectbox("Select Sign Type:", ["Pole Sign", "Fin Sign"])
 many = st.slider("How many pictures:", 1, 6)
 model_type = st.radio("Select Part", ("Signs", "Base"))
 
-model_paths = {
-    "Base": "model/convnext_best.h5"  # ✅ ใช้ ConvNeXt model
-}
-labels_paths = {
-    "Base": "model/labels.txt"
-}
-
-model_path = model_paths[model_type]
-labels_path = labels_paths[model_type]
-
-# ✅ โหลดโมเดลด้วย custom_objects
 try:
-    custom_objects = {
-        'DepthwiseConv2D': DepthwiseConv2DFixed,
-        'ConvNeXt': ConvNeXtTiny
-    }
-    model = load_model(model_path, custom_objects=custom_objects, compile=False)
-
-    with open(labels_path, 'r') as f:
-        class_names = [line.strip().split()[-1] for line in f]
-
+    model = load_model_cached()
+    class_names = load_labels()
+    st.success("✅ Model loaded successfully!")
 except Exception as e:
-    st.error(f"Error loading model or labels: {e}")
-
-# ---------------------------- Upload Images ----------------------------
+    st.error(f"❌ Failed to load model: {e}")
+    st.stop()
 
 excel_file_path = 'data.xlsx'
 image_folder_path = 'images/'
-
 if not os.path.exists(image_folder_path):
     os.makedirs(image_folder_path)
 
@@ -145,14 +138,20 @@ if files:
             with pd.ExcelWriter(excel_file_path, engine='openpyxl', mode='w') as writer:
                 updated_df.to_excel(writer, index=False)
 
-            st.success('Submission complete')
+            st.success('✅ Submission complete')
+
+            # เตรียมไฟล์ Excel สำหรับดาวน์โหลดแบบ BytesIO
+            towrite = io.BytesIO()
+            with pd.ExcelWriter(towrite, engine='openpyxl') as writer:
+                updated_df.to_excel(writer, index=False)
+            towrite.seek(0)
 
             st.download_button(
                 label="Download data as Excel",
-                data=updated_df.to_excel(index=False),
+                data=towrite,
                 file_name=f"maintenance_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
         except Exception as e:
-            st.error(f"An error occurred while saving the file: {e}")
+            st.error(f"❌ Error saving Excel file: {e}")
