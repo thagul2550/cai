@@ -3,5 +3,5 @@ streamlit
 Pillow
 keras
 tensorflow
-gdown
 openpyxl
+huggingface_hub
