@@ -5,18 +5,24 @@ import pandas as pd
 import os
 from util import classify, set_background
 from datetime import datetime
+import tensorflow as tf
 from tensorflow.keras.layers import DepthwiseConv2D as OriginalDepthwiseConv2D
 from tensorflow.keras.utils import get_custom_objects
+from tensorflow.keras.applications import ConvNeXtTiny
 
-# ✅ แก้ไข: คลาส DepthwiseConv2DFixed สำหรับตัด groups ออก
+# ✅ แก้ DepthwiseConv2DFixed
 class DepthwiseConv2DFixed(OriginalDepthwiseConv2D):
     def __init__(self, *args, **kwargs):
-        if 'groups' in kwargs:  # ลบ argument groups ออก
+        if 'groups' in kwargs:
             kwargs.pop('groups')
         super().__init__(*args, **kwargs)
 
-# ✅ ลงทะเบียน custom class แทน DepthwiseConv2D
-get_custom_objects().update({'DepthwiseConv2D': DepthwiseConv2DFixed})
+# ✅ ลงทะเบียน custom layers
+_ = ConvNeXtTiny()  # ลงทะเบียน ConvNeXt
+get_custom_objects().update({
+    'DepthwiseConv2D': DepthwiseConv2DFixed,
+    'ConvNeXt': ConvNeXtTiny
+})
 
 # ---------------------------- Streamlit UI ----------------------------
 
@@ -27,7 +33,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ✅ แก้ path ของ background
+# ✅ Set background
 try:
     set_background("bg/AI for preventive maintenance Signage of 7-ELEVEN's with photo inspection.png")
 except Exception as e:
@@ -59,7 +65,7 @@ many = st.slider("How many pictures:", 1, 6)
 model_type = st.radio("Select Part", ("Signs", "Base"))
 
 model_paths = {
-    "Base": "model/keras_model.h5"
+    "Base": "model/convnext_best.h5"  # ✅ ใช้ ConvNeXt model
 }
 labels_paths = {
     "Base": "model/labels.txt"
@@ -68,11 +74,17 @@ labels_paths = {
 model_path = model_paths[model_type]
 labels_path = labels_paths[model_type]
 
-# ✅ โหลดโมเดลด้วย custom DepthwiseConv2D
+# ✅ โหลดโมเดลด้วย custom_objects
 try:
-    model = load_model(model_path, compile=False)
+    custom_objects = {
+        'DepthwiseConv2D': DepthwiseConv2DFixed,
+        'ConvNeXt': ConvNeXtTiny
+    }
+    model = load_model(model_path, custom_objects=custom_objects, compile=False)
+
     with open(labels_path, 'r') as f:
-        class_names = [line.strip().split(' ')[1] for line in f]
+        class_names = [line.strip().split()[-1] for line in f]
+
 except Exception as e:
     st.error(f"Error loading model or labels: {e}")
 

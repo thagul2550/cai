@@ -11,7 +11,6 @@ def set_background(image_file):
     Supports Windows paths with backslashes, spaces, and special characters.
     """
     try:
-        # ✅ ป้องกันปัญหา escape character โดย normalize path
         safe_path = os.path.normpath(image_file)
 
         if not os.path.exists(safe_path):
@@ -39,25 +38,29 @@ def set_background(image_file):
 
 def classify(image, model, class_names):
     """
-    Classify an image using a trained Keras model and return class name + confidence score.
+    Classify an image using a ConvNeXt or standard Keras model.
+    Automatically detects model input size.
     """
-    # Resize image to (224, 224)
-    image = ImageOps.fit(image, (224, 224), Image.Resampling.LANCZOS)
+    try:
+        # ✅ Detect model input shape (ConvNeXt uses 224 or 256)
+        input_shape = model.input_shape[1:3] if model.input_shape else (224, 224)
+        target_size = (input_shape[0], input_shape[1])
 
-    # Convert to numpy
-    image_array = np.asarray(image)
+        # ✅ Resize image
+        image = ImageOps.fit(image, target_size, Image.Resampling.LANCZOS)
 
-    # Normalize image
-    normalized_image_array = (image_array.astype(np.float32) / 127.5) - 1
+        # ✅ Normalize to [0,1]
+        img_array = np.asarray(image).astype(np.float32) / 255.0
+        img_array = np.expand_dims(img_array, axis=0)
 
-    # Prepare data
-    data = np.ndarray(shape=(1, 224, 224, 3), dtype=np.float32)
-    data[0] = normalized_image_array
+        # ✅ Predict
+        prediction = model.predict(img_array)
+        index = np.argmax(prediction)
+        class_name = class_names[index]
+        confidence_score = float(prediction[0][index])
 
-    # Predict
-    prediction = model.predict(data)
-    index = np.argmax(prediction)
-    class_name = class_names[index]
-    confidence_score = prediction[0][index]
+        return class_name, confidence_score
 
-    return class_name, confidence_score
+    except Exception as e:
+        st.error(f"Error during prediction: {e}")
+        return "Unknown", 0.0
